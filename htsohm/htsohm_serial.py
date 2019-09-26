@@ -4,6 +4,7 @@ from glob import glob
 import math
 import os
 import random
+from random import uniform
 import sys
 
 import numpy as np
@@ -15,9 +16,8 @@ from htsohm.figures import delaunay_figure
 import htsohm.select.triangulation as selector_tri
 import htsohm.select.density_bin as selector_bin
 import htsohm.select.best as selector_best
+import htsohm.select.last_best as selector_last_best
 import htsohm.select.specific as selector_specific
-
-
 
 def print_block(string):
     print('{0}\n{1}\n{0}'.format('=' * 80, string))
@@ -75,6 +75,7 @@ def serial_runloop(config_path):
     next_benchmark = benchmarks.pop(0)
     last_benchmark_reached = False
     load_restart_path = config['load_restart_path'] if 'load_restart_path' in config else False
+    initial_points = config['initial_points'] if 'initial_points' in config else "random"
 
     dbcs = config["database_connection_string"]
     db.init_database(dbcs, backup=(load_restart_path != False))
@@ -135,9 +136,22 @@ def serial_runloop(config_path):
             print("applying random seed to initial points: %d" % config['initial_points_random_seed'])
             random.seed(config['initial_points_random_seed'])
 
-        for i in range(children_per_generation):
-            print("Material Index: ", i)
-            material = pseudomaterial_generator.random.new_material(run_id, config["structure_parameters"])
+        materials = []
+        if initial_points == "cubic":
+            scfg = config["structure_parameters"]
+            for i in range(children_per_generation):
+                materials.append(Material.eight_atom_cubic(
+                    sigma = uniform(*scfg["sigma_limits"]),
+                    epsilon = uniform(*scfg["epsilon_limits"]),
+                    a = uniform(*scfg["lattice_constant_limits"]),
+                    b = uniform(*scfg["lattice_constant_limits"]),
+                    c = uniform(*scfg["lattice_constant_limits"])))
+        else: # random
+            for i in range(children_per_generation):
+                print("Material Index: ", i)
+                materials.append(pseudomaterial_generator.random.new_material(run_id, config["structure_parameters"]))
+
+        for i, material in enumerate(materials):
             run_all_simulations(material, config)
             material.generation = 0
             session.add(material)
@@ -181,6 +195,8 @@ def serial_runloop(config_path):
             parents_d, parents_r, bin_scores = selector_bin.choose_parents(children_per_generation, box_d, box_r, bin_materials, score_by_empty_neighbors=True)
         elif config['selector_type'] == 'best':
             parents_d, parents_r, _ = selector_best.choose_parents(children_per_generation, box_d, box_r)
+        elif config['selector_type'] == 'last-best':
+            parents_d, parents_r, _ = selector_last_best.choose_parents(children_per_generation, box_d, box_r)
         elif config['selector_type'] == 'specific':
             parents_d, parents_r, _ = selector_specific.choose_parents(children_per_generation, box_d, box_r, config['selector_specific_id'])
 

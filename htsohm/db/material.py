@@ -1,3 +1,4 @@
+import itertools
 import uuid
 
 from sqlalchemy import ForeignKey, Column, Integer, String, Float
@@ -62,6 +63,17 @@ class Material(Base):
                 [LennardJones(atom_type="A_0", sigma=sigma, epsilon=epsilon)])
         m = Material(structure=structure)
         return m
+
+    def eight_atom_cubic(sigma, epsilon, a, b, c):
+        atomsites = itertools.product((0.0, 0.5), (0.0, 0.5), (0.0, 0.5))
+        structure = Structure(a, b, c,
+                [AtomSite(atom_type="A_0", x=a[0], y=a[1], z=a[2], q=0.0) for a in atomsites],
+                [LennardJones(atom_type="A_0", sigma=sigma, epsilon=epsilon)])
+        m = Material(structure=structure)
+        m.unit_cell_volume = m.structure.volume
+        m.number_density = 8 / m.unit_cell_volume
+        return m
+
 
     @staticmethod
     def cube_pore_new(sigma, epsilon, num_atoms, atom_diameter):
